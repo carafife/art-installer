@@ -25,9 +25,22 @@ fi
 
 # Dépendances : Python + GTK4 + libadwaita (déjà présentes sur Fedora Workstation)
 if ! python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1')" 2>/dev/null; then
-    echo "Il manque GTK4 / libadwaita pour Python. Sur Fedora, lance :"
+    # Nom des paquets selon la distribution
+    if   command -v dnf    >/dev/null 2>&1; then CMD="sudo dnf install python3-gobject gtk4 libadwaita"
+    elif command -v apt-get >/dev/null 2>&1; then CMD="sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1"
+    elif command -v pacman >/dev/null 2>&1; then CMD="sudo pacman -S --needed python-gobject gtk4 libadwaita"
+    elif command -v zypper >/dev/null 2>&1; then CMD="sudo zypper install python3-gobject-Gdk gtk4 libadwaita-1-0"
+    elif command -v eopkg  >/dev/null 2>&1; then CMD="sudo eopkg install python3-gobject gtk4 libadwaita"
+    else CMD=""
+    fi
+    echo "Il manque GTK 4 / libadwaita pour Python."
     echo
-    echo "    sudo dnf install python3-gobject gtk4 libadwaita"
+    if [ -n "$CMD" ]; then
+        echo "    $CMD"
+    else
+        echo "Installe les paquets python3-gobject, gtk4 et libadwaita avec le"
+        echo "gestionnaire de paquets de ta distribution."
+    fi
     echo
     echo "puis relance ./install.sh"
     exit 1

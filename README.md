@@ -33,7 +33,7 @@ L'Installateur ART s'en charge pour vous, avec une interface claire, et vérifie
 | 📦 **Bundle officiel** | Télécharge et installe le bundle prêt à l'emploi (CTL et OCIO inclus), crée les commandes `ART` / `ART-cli` et l'icône dans le menu. |
 | 🛠️ **Compilation** | Compile ART depuis les sources, version stable ou de développement, avec les options de votre choix. |
 | ⚙️ **Options** | Scripts CTL, OpenColorIO, LibRaw, mimalloc, accélération GPU Vulkan (expérimental), optimisation pour votre processeur, LTO. |
-| 📥 **Dépendances** | Installe automatiquement les paquets nécessaires avec `dnf` (Fedora). |
+| 📥 **Dépendances** | Repère votre distribution et installe les paquets nécessaires avec `dnf`, `apt`, `pacman`, `zypper` ou `eopkg`. |
 | ✅ **Vérification** | Lit le fichier `AboutThisBuild.txt` d'ART pour confirmer que les fonctionnalités demandées sont bien présentes. |
 | 🧹 **Nettoyage** | Propose de supprimer les anciens bundles, toujours après confirmation. Une version compilée n'est jamais touchée. |
 | 📝 **Journal** | Détails de chaque étape à l'écran, et journal complet copiable pour demander de l'aide sur le forum. |
@@ -50,11 +50,17 @@ L'Installateur ART s'en charge pour vous, avec une interface claire, et vérifie
 
 ### Prérequis
 
-Python 3, GTK 4 et libadwaita. Ils sont déjà présents sur Fedora Workstation. Sinon :
+Python 3, GTK 4 et libadwaita. Ils sont déjà présents sur Fedora Workstation et sur la plupart des bureaux GNOME récents. Sinon, selon votre distribution :
 
-```bash
-sudo dnf install git python3-gobject gtk4 libadwaita
-```
+| Distribution | Commande |
+|---|---|
+| Fedora, RHEL, Nobara | `sudo dnf install git python3-gobject gtk4 libadwaita` |
+| Debian, Ubuntu, Mint | `sudo apt install git python3-gi gir1.2-gtk-4.0 gir1.2-adw-1` |
+| Arch, Manjaro | `sudo pacman -S --needed git python-gobject gtk4 libadwaita` |
+| openSUSE | `sudo zypper install git python3-gobject-Gdk gtk4 libadwaita-1-0` |
+| Solus | `sudo eopkg install git python3-gobject gtk4 libadwaita` |
+
+`install.sh` vérifie ces paquets et affiche la bonne commande si l'un manque.
 
 ### 1. Télécharger l'installateur
 
@@ -135,8 +141,22 @@ Pour utiliser des simulations de film et autres scripts `.ctl` :
 
 ## Compatibilité
 
-- **Testé sur :** Fedora (GNOME).
-- **Autres distributions :** l'installation du bundle fonctionne partout où GTK 4 et libadwaita sont disponibles. Pour la compilation, désactivez l'installation automatique des dépendances et installez les paquets équivalents vous-même.
+L'installateur repère votre distribution avec `/etc/os-release` et choisit le gestionnaire de paquets correspondant — y compris sur les dérivées (Mint et Pop!_OS passent par `apt`, Manjaro par `pacman`, Nobara par `dnf`).
+
+| | Installation du bundle | Compilation | Scripts CTL en compilation |
+|---|:---:|:---:|:---:|
+| Fedora, RHEL, Nobara | ✅ | ✅ `dnf` | ✅ |
+| openSUSE Tumbleweed | ✅ | ✅ `zypper` | ✅ |
+| Debian, Ubuntu, Mint | ✅ | ✅ `apt` | ❌ non packagé |
+| Arch, Manjaro | ✅ | ✅ `pacman` | ❌ dans AUR seulement |
+| Solus | ✅ | ✅ `eopkg` | ❌ non packagé |
+| Autre | ✅ | Dépendances à installer à la main | — |
+
+**L'installation du bundle fonctionne partout** où GTK 4 et libadwaita sont disponibles : elle ne touche à aucun gestionnaire de paquets et place tout dans `~/.local`. Le bundle officiel **contient déjà le CTL et OpenColorIO** — c'est donc la bonne méthode si vous voulez les scripts CTL sur une distribution qui ne les package pas.
+
+Pour la compilation, les paquets propres à une option absente de vos dépôts sont simplement écartés : l'installateur le signale dans le journal et l'option apparaît comme indisponible, au lieu de faire échouer l'installation.
+
+- **Testé sur :** Fedora (GNOME). Les listes de paquets des autres distributions sont vérifiées avant usage, mais pas encore éprouvées sur machine — [vos retours](https://github.com/carafife/art-installer/issues) sont bienvenus.
 - **Architectures :** x86_64 et aarch64.
 
 ## Signaler un problème

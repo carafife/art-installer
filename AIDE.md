@@ -48,7 +48,7 @@ Chaque version d'ART trouvée apparaît sur une ligne avec :
   |---|---|
   | Bundle officiel | Archive prête à l'emploi téléchargée depuis le site d'ART |
   | Compilé depuis les sources | Version que vous (ou l'installateur) avez compilée |
-  | Paquet de la distribution | Installée par `dnf` depuis les dépôts Fedora |
+  | Paquet de la distribution | Installée depuis les dépôts de votre distribution |
   | Flatpak / AppImage | Versions isolées du reste du système |
 
 - **des badges** :
@@ -177,13 +177,25 @@ Le code source d'ART y est téléchargé et compilé. **Conservez ce dossier** :
 
 ### Installer les dépendances automatiquement
 
-*Par défaut : activé (si `dnf` est présent)*
+*Par défaut : activé (si un gestionnaire de paquets est reconnu)*
 
-Pour compiler ART, il faut un compilateur et des bibliothèques de développement (paquets `-devel`). L'installateur les installe avec `dnf` ; une fenêtre système vous demande votre mot de passe.
+Pour compiler ART, il faut un compilateur et des bibliothèques de développement. L'installateur lit `/etc/os-release`, en déduit le gestionnaire de paquets de votre distribution, et installe les paquets correspondants ; une fenêtre système vous demande votre mot de passe.
+
+| Distribution | Gestionnaire utilisé |
+|---|---|
+| Fedora, RHEL, CentOS, Rocky, AlmaLinux, Nobara | `dnf` |
+| Debian, Ubuntu, Mint, Pop!_OS, elementary, Zorin | `apt` |
+| Arch, Manjaro, EndeavourOS, Garuda, CachyOS | `pacman` |
+| openSUSE (Leap et Tumbleweed), SLES | `zypper` |
+| Solus | `eopkg` |
+
+Les dérivées sont reconnues par leur champ `ID_LIKE` : une distribution fondée sur Debian passera par `apt` même si elle n'est pas listée ci-dessus.
 
 La liste dépend des fonctionnalités cochées : décocher Vulkan, par exemple, évite d'installer les outils Vulkan.
 
-**Pourquoi le désactiver ?** Si vous êtes sur une autre distribution que Fedora, ou si les dépendances sont déjà installées. Le bouton « Voir les commandes » affiche la liste des paquets nécessaires.
+**Les paquets absents de vos dépôts sont écartés avant l'installation**, pour qu'un seul nom de paquet périmé n'empêche pas tout le reste. Le journal indique lesquels, et l'option concernée est signalée comme indisponible.
+
+**Pourquoi le désactiver ?** Si les dépendances sont déjà installées, ou si vous préférez les poser vous-même. Le bouton « Voir les commandes » affiche la liste exacte des paquets, adaptée à votre distribution. Si aucun gestionnaire n'est reconnu, l'interrupteur est grisé et c'est la seule marche à suivre.
 
 ### Fonctionnalités
 
@@ -197,7 +209,11 @@ Le CTL (*Color Transformation Language*) est un langage de script pour les coule
 
 **Activez-le** si vous utilisez ou voulez essayer des simulations de film. C'est la principale raison de compiler soi-même : sans cette option, ART fonctionne mais ignore les fichiers `.ctl`.
 
-Paquets installés : `ctl-devel`, `openexr-devel`.
+Paquets installés : `ctl-devel` et `openexr-devel` sur Fedora et openSUSE.
+
+> **⚠️ L'interpréteur CTL n'est packagé que par Fedora et openSUSE Tumbleweed.** Sur Debian, Ubuntu, Arch et Solus, il n'existe pas dans les dépôts officiels (Arch ne l'a que dans AUR). L'interrupteur apparaît alors comme indisponible, et compiler ne vous donnera pas le CTL.
+>
+> **Sur ces distributions, prenez le bundle officiel : il inclut déjà le CTL et OpenColorIO.** C'est la méthode recommandée pour les scripts `.ctl` hors Fedora et openSUSE.
 
 #### OpenColorIO
 
@@ -233,7 +249,7 @@ Paquet installé : `mimalloc-devel`.
 
 *Option CMake : `ENABLE_VULKAN` — par défaut : désactivé*
 
-Fait exécuter certains calculs d'ART par la **carte graphique** plutôt que par le processeur, grâce à Vulkan. Fonctionne avec les cartes AMD, Intel et NVIDIA, à condition que le pilote Vulkan soit installé (c'est le cas par défaut sous Fedora pour AMD et Intel).
+Fait exécuter certains calculs d'ART par la **carte graphique** plutôt que par le processeur, grâce à Vulkan. Fonctionne avec les cartes AMD, Intel et NVIDIA, à condition que le pilote Vulkan soit installé (c'est le cas par défaut sur la plupart des distributions pour AMD et Intel).
 
 **Activez-le** si vous voulez tester des traitements plus rapides et que vous acceptez quelques imperfections : la fonction est récente. En cas de souci, recompilez sans cette option.
 
@@ -267,7 +283,7 @@ Le nombre de fichiers compilés en même temps. Plus il est élevé, plus la com
 
 ### Voir les commandes
 
-Affiche exactement ce que l'installateur va exécuter : `dnf`, `git`, `cmake`. Utile pour comprendre, pour reproduire à la main, ou pour demander de l'aide sur le forum.
+Affiche exactement ce que l'installateur va exécuter : l'installation des paquets avec le gestionnaire de votre distribution, puis `git` et `cmake`. Utile pour comprendre, pour reproduire à la main, ou pour demander de l'aide sur le forum.
 
 ---
 
@@ -337,7 +353,7 @@ Relancez simplement l'Installateur ART : il détecte votre version actuelle et v
 Vérifiez la connexion Internet, puis cliquez sur ⟳. GitHub limite aussi le nombre de requêtes anonymes à 60 par heure : en cas d'usage intensif, patientez un peu.
 
 **La fenêtre de mot de passe ne s'affiche pas**
-L'installateur utilise `pkexec`. Sous GNOME et KDE, c'est automatique. Sur un bureau minimaliste, installez et lancez un agent polkit, ou décochez « Installer les dépendances » et lancez vous-même la commande `dnf` affichée dans « Voir les commandes ».
+L'installateur utilise `pkexec`. Sous GNOME et KDE, c'est automatique. Sur un bureau minimaliste, installez et lancez un agent polkit, ou décochez « Installer les dépendances » et lancez vous-même la commande d'installation affichée dans « Voir les commandes ».
 
 **La compilation échoue à l'étape « Configurer »**
 Une bibliothèque manque. Ouvrez les détails : la ligne contenant `Could not find` ou `not found` indique laquelle. Installez le paquet `-devel` correspondant, ou décochez la fonctionnalité concernée.
@@ -346,7 +362,9 @@ Une bibliothèque manque. Ouvrez les détails : la ligne contenant `Could not fi
 La mémoire est saturée. Réduisez le nombre de tâches en parallèle et désactivez le LTO.
 
 **« Le CTL a été demandé mais n'est pas actif »**
-Vérifiez que `ctl-devel` et `openexr-devel` sont installés :
+D'abord, vérifiez que votre distribution package l'interpréteur CTL : seules Fedora et openSUSE Tumbleweed le font. Ailleurs, utilisez le bundle officiel, qui l'inclut.
+
+Sur Fedora, vérifiez que `ctl-devel` et `openexr-devel` sont installés :
 
 ```bash
 dnf list --installed ctl-devel openexr-devel

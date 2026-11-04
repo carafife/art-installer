@@ -370,11 +370,13 @@ class Window(Adw.ApplicationWindow):
         self.c_prefix.connect("notify::selected", lambda r, *_: r.set_subtitle(
             "Mot de passe administrateur demandé" if r.get_selected() else "Sans mot de passe"))
         self.e_src = Adw.EntryRow(title="Dossier des sources", text=tilde(o.src_dir))
-        has_dnf = core.has("dnf")
-        self.sw_deps = Adw.SwitchRow(title="Installer les dépendances automatiquement",
-                                     subtitle="Via dnf, mot de passe administrateur demandé" if has_dnf
-                                     else "dnf introuvable : installe les dépendances toi-même",
-                                     active=has_dnf, sensitive=has_dnf)
+        self.pkg_mgr = core.package_manager()
+        self.sw_deps = Adw.SwitchRow(
+            title="Installer les dépendances automatiquement",
+            subtitle=f"Via {self.pkg_mgr}, mot de passe administrateur demandé" if self.pkg_mgr
+            else f"Gestionnaire de paquets non reconnu sur {core.distro_name()} : "
+                 "installe les dépendances toi-même",
+            active=bool(self.pkg_mgr), sensitive=bool(self.pkg_mgr))
         for r in (self.c_prefix, self.e_src, self.sw_deps):
             g2.add(r)
         body.append(g2)
@@ -388,9 +390,15 @@ class Window(Adw.ApplicationWindow):
             ("vulkan", "Accélération GPU Vulkan  —  expérimental",
              "Calcul sur la carte graphique (AMD, Intel, NVIDIA)"),
         ]
+        sans_paquet = core.unsupported_features(self.pkg_mgr) if self.pkg_mgr else []
         self.sw_feat = {}
         for key, title, sub in specs:
-            sw = Adw.SwitchRow(title=title, subtitle=sub, active=o.features[key])
+            if key in sans_paquet:
+                sub = ("Pas de paquet sur cette distribution — "
+                       "le bundle officiel l'inclut déjà" if key in ("ctl", "ocio")
+                       else "Pas de paquet sur cette distribution")
+            sw = Adw.SwitchRow(title=title, subtitle=sub,
+                               active=o.features[key] and key not in sans_paquet)
             self.sw_feat[key] = sw
             g3.add(sw)
         body.append(g3)
@@ -453,8 +461,12 @@ class Window(Adw.ApplicationWindow):
     def update_cmd_preview(self):
         o = self.compile_options()
         lines = []
-        if o.install_deps:
-            lines.append("sudo dnf install " + " ".join(core.dnf_packages(o)))
+        if o.install_deps and self.pkg_mgr:
+            cmd = core.PKG_COMMANDS[self.pkg_mgr]
+            if cmd.get("refresh"):
+                lines.append("sudo " + " ".join(cmd["refresh"]))
+            lines.append("sudo " + " ".join(cmd["install"] + cmd.get("skip", []))
+                         + " " + " ".join(core.packages(o, self.pkg_mgr)))
         lines.append(f"git clone {core.GIT_URL} {tilde(o.src_dir)}")
         lines.append(f"git -C {tilde(o.src_dir)} checkout {o.ref}")
         lines.append(shlex.join(core.cmake_command(o)).replace(str(Path.home()), "~"))

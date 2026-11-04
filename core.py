@@ -22,7 +22,7 @@ from pathlib import Path
 
 APP_NAME = "Installateur ART"
 APP_ID = "io.github.carafife.ArtInstaller"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 PROJECT_URL = "https://github.com/carafife/art-installer"
 HELP_URL = PROJECT_URL + "/blob/main/AIDE.md"
 
@@ -43,22 +43,271 @@ LOG_DIR = HOME / ".cache" / "art-installer"
 DESKTOP_MARK = "X-ART-Installer=bundle"
 
 # ---------------------------------------------------------------------------
-# Dépendances de compilation (Fedora / dnf)
+# Dépendances de compilation, par distribution
+#
+# Les noms de paquets changent d'une distribution à l'autre. On repère le
+# gestionnaire de paquets du système, puis on prend la liste correspondante.
+# Les listes autres que dnf sont établies au mieux : avant toute installation,
+# available_packages() écarte celles qui n'existent pas dans les dépôts, et
+# missing_features() dit quelles options en pâtissent. Un nom de paquet qui
+# aurait changé fait donc perdre une option, jamais échouer l'installation.
 # ---------------------------------------------------------------------------
-DNF_BASE = [
-    "git", "cmake", "make", "gcc-c++", "pkgconf-pkg-config",
-    "gtk3-devel", "gtkmm30-devel", "glibmm24-devel", "cairomm-devel",
-    "libsigc++20-devel", "lensfun-devel", "librsvg2-devel", "exiv2-devel",
-    "lcms2-devel", "expat-devel", "fftw-devel", "libtiff-devel",
-    "libcanberra-devel", "libjpeg-turbo-devel", "libpng-devel", "zlib-devel",
-]
-DNF_FEATURES = {
-    "ctl": ["ctl-devel", "openexr-devel"],
-    "ocio": ["OpenColorIO-devel"],
-    "libraw": ["LibRaw-devel"],
-    "mimalloc": ["mimalloc-devel"],
-    "vulkan": ["vulkan-headers", "vulkan-loader-devel", "glslc"],
+
+# ID et ID_LIKE de /etc/os-release -> gestionnaire de paquets
+DISTRO_MANAGERS = {
+    "almalinux": "dnf", "centos": "dnf", "fedora": "dnf", "nobara": "dnf",
+    "rhel": "dnf", "rocky": "dnf",
+    "debian": "apt", "elementary": "apt", "linuxmint": "apt", "pop": "apt",
+    "raspbian": "apt", "ubuntu": "apt", "zorin": "apt",
+    "arch": "pacman", "cachyos": "pacman", "endeavouros": "pacman",
+    "garuda": "pacman", "manjaro": "pacman",
+    "opensuse": "zypper", "opensuse-leap": "zypper",
+    "opensuse-tumbleweed": "zypper", "sled": "zypper", "sles": "zypper",
+    "suse": "zypper",
+    "solus": "eopkg",
 }
+
+# Paquets de base, et paquets propres à chaque option de compilation.
+# Une option à None n'est pas disponible sur cette distribution.
+PACKAGES = {
+    "dnf": {
+        "base": [
+            "git", "cmake", "make", "gcc-c++", "pkgconf-pkg-config",
+            "gtk3-devel", "gtkmm30-devel", "glibmm24-devel", "cairomm-devel",
+            "libsigc++20-devel", "lensfun-devel", "librsvg2-devel", "exiv2-devel",
+            "lcms2-devel", "expat-devel", "fftw-devel", "libtiff-devel",
+            "libcanberra-devel", "libjpeg-turbo-devel", "libpng-devel", "zlib-devel",
+        ],
+        "features": {
+            "ctl": ["ctl-devel", "openexr-devel"],
+            "ocio": ["OpenColorIO-devel"],
+            "libraw": ["LibRaw-devel"],
+            "mimalloc": ["mimalloc-devel"],
+            "vulkan": ["vulkan-headers", "vulkan-loader-devel", "glslc"],
+        },
+    },
+    "apt": {
+        "base": [
+            "git", "cmake", "make", "g++", "pkg-config",
+            "libgtk-3-dev", "libgtkmm-3.0-dev", "libglibmm-2.4-dev",
+            "libcairomm-1.0-dev", "libsigc++-2.0-dev", "liblensfun-dev",
+            "librsvg2-dev", "libexiv2-dev", "liblcms2-dev", "libexpat1-dev",
+            "libfftw3-dev", "libtiff-dev", "libcanberra-gtk3-dev",
+            "libjpeg-dev", "libpng-dev", "zlib1g-dev",
+        ],
+        "features": {
+            "ctl": None,          # l'interpréteur CTL n'est pas packagé
+            "ocio": ["libopencolorio-dev"],
+            "libraw": ["libraw-dev"],
+            "mimalloc": ["libmimalloc-dev"],
+            "vulkan": ["libvulkan-dev", "glslc"],
+        },
+    },
+    "pacman": {
+        "base": [
+            "git", "cmake", "make", "gcc", "pkgconf",
+            "gtk3", "gtkmm3", "glibmm", "cairomm", "libsigc++", "lensfun",
+            "librsvg", "exiv2", "lcms2", "expat", "fftw", "libtiff",
+            "libcanberra", "libjpeg-turbo", "libpng", "zlib",
+        ],
+        "features": {
+            "ctl": None,          # seulement dans AUR, hors dépôts officiels
+            "ocio": ["opencolorio"],
+            "libraw": ["libraw"],
+            "mimalloc": ["mimalloc"],
+            "vulkan": ["vulkan-headers", "vulkan-icd-loader", "shaderc"],
+        },
+    },
+    "zypper": {
+        "base": [
+            "git", "cmake", "make", "gcc-c++", "pkgconf-pkg-config",
+            "gtk3-devel", "gtkmm3-devel", "glibmm2_4-devel", "cairomm1_0-devel",
+            "libsigc++2-devel", "lensfun-devel", "librsvg-devel", "libexiv2-devel",
+            "liblcms2-devel", "libexpat-devel", "fftw3-devel", "libtiff-devel",
+            "libcanberra-devel", "libjpeg8-devel", "libpng16-devel", "zlib-devel",
+        ],
+        "features": {
+            "ctl": ["ctl-devel", "openexr-devel"],
+            "ocio": ["OpenColorIO-devel"],
+            "libraw": ["libraw-devel"],
+            "mimalloc": ["mimalloc-devel"],
+            "vulkan": ["vulkan-headers", "vulkan-devel", "shaderc"],
+        },
+    },
+    "eopkg": {
+        "base": [
+            "git", "cmake", "make", "gcc", "pkgconf",
+            "gtk3-devel", "gtkmm-devel", "glibmm-devel", "cairomm-devel",
+            "libsigc++-devel", "lensfun-devel", "librsvg-devel", "exiv2-devel",
+            "lcms2-devel", "expat-devel", "fftw-devel", "libtiff-devel",
+            "libcanberra-devel", "libjpeg-turbo-devel", "libpng-devel", "zlib-devel",
+        ],
+        "features": {
+            "ctl": None,          # l'interpréteur CTL n'est pas packagé
+            "ocio": ["opencolorio-devel"],
+            "libraw": ["libraw-devel"],
+            "mimalloc": ["mimalloc-devel"],
+            "vulkan": ["vulkan-headers", "shaderc-devel"],
+        },
+    },
+}
+
+# Commandes de chaque gestionnaire.
+#   refresh : mise à jour de l'index des paquets, avant l'installation
+#   install : installation, exécutée via pkexec
+#   query   : test d'existence d'un paquet, sans privilèges (None = pas de test)
+#   skip    : option qui fait ignorer au gestionnaire un paquet introuvable
+PKG_COMMANDS = {
+    "dnf": {
+        "refresh": None,
+        "install": ["dnf", "install", "-y"],
+        "query": None,
+        "skip": ["--skip-unavailable"],
+    },
+    "apt": {
+        "refresh": ["apt-get", "update"],
+        "install": ["apt-get", "install", "-y"],
+        "query": ["apt-cache", "show"],
+        "skip": [],
+    },
+    "pacman": {
+        "refresh": ["pacman", "-Sy", "--noconfirm"],
+        "install": ["pacman", "-S", "--needed", "--noconfirm"],
+        "query": ["pacman", "-Si"],
+        "skip": [],
+    },
+    "zypper": {
+        "refresh": ["zypper", "--non-interactive", "refresh"],
+        "install": ["zypper", "--non-interactive", "install"],
+        "query": ["zypper", "--non-interactive", "--quiet", "search", "--match-exact"],
+        "skip": [],
+    },
+    # eopkg : « info » signale un paquet inconnu sans toujours renvoyer un code
+    # d'erreur. Le test peut donc laisser passer un nom périmé ; l'installation
+    # échouera alors franchement, en journalisant la commande à lancer à la main.
+    "eopkg": {
+        "refresh": ["eopkg", "update-repo"],
+        "install": ["eopkg", "install", "-y"],
+        "query": ["eopkg", "info"],
+        "skip": [],
+    },
+}
+
+
+def distro_id():
+    """ID de la distribution d'après /etc/os-release (ex. « fedora »)."""
+    try:
+        for line in Path("/etc/os-release").read_text().splitlines():
+            if line.startswith("ID="):
+                return line.split("=", 1)[1].strip().strip('"\'').lower()
+    except OSError:
+        pass
+    return ""
+
+
+def distro_name():
+    """Nom lisible de la distribution (ex. « Fedora Linux 44 »)."""
+    try:
+        for key in ("PRETTY_NAME=", "NAME="):
+            for line in Path("/etc/os-release").read_text().splitlines():
+                if line.startswith(key):
+                    val = line.split("=", 1)[1].strip().strip('"\'')
+                    if val:
+                        return val
+    except OSError:
+        pass
+    return "distribution inconnue"
+
+
+def package_manager():
+    """Gestionnaire de paquets à utiliser, ou None si aucun n'est reconnu.
+
+    On part de /etc/os-release (ID puis ID_LIKE), ce qui donne le bon
+    gestionnaire pour les dérivées, et on ne retient que celui qui est
+    réellement installé. À défaut, on se rabat sur la première commande
+    trouvée, pour les distributions absentes de DISTRO_MANAGERS.
+    """
+    candidates = []
+    try:
+        text = Path("/etc/os-release").read_text()
+    except OSError:
+        text = ""
+    ids = []
+    for line in text.splitlines():
+        if line.startswith("ID="):
+            ids.append(line.split("=", 1)[1].strip().strip('"\'').lower())
+        elif line.startswith("ID_LIKE="):
+            ids += line.split("=", 1)[1].strip().strip('"\'').lower().split()
+    for i in ids:
+        mgr = DISTRO_MANAGERS.get(i)
+        if mgr and mgr not in candidates:
+            candidates.append(mgr)
+    for mgr in candidates:
+        if has(mgr) or (mgr == "apt" and has("apt-get")):
+            return mgr
+    for mgr in PACKAGES:
+        if has(mgr) or (mgr == "apt" and has("apt-get")):
+            return mgr
+    return None
+
+
+def base_packages(mgr):
+    return list(PACKAGES.get(mgr, {}).get("base", []))
+
+
+def feature_packages(mgr, key):
+    """Paquets d'une option, ou None si l'option n'est pas disponible ici."""
+    return PACKAGES.get(mgr, {}).get("features", {}).get(key, [])
+
+
+def unsupported_features(mgr, keys=None):
+    """Options demandées qu'aucun paquet de cette distribution ne couvre."""
+    keys = list(CMAKE_FEATURES) if keys is None else keys
+    return [k for k in keys if feature_packages(mgr, k) is None]
+
+
+def packages(opts, mgr=None):
+    """Liste des paquets à installer pour ces options de compilation."""
+    mgr = mgr or package_manager()
+    pkgs = base_packages(mgr)
+    for key, on in opts.features.items():
+        if on:
+            pkgs += feature_packages(mgr, key) or []
+    seen = []
+    for p in pkgs:
+        if p not in seen:
+            seen.append(p)
+    return seen
+
+
+def available_packages(mgr, pkgs, log=None):
+    """Écarte les paquets absents des dépôts, pour ne pas tout faire échouer.
+
+    Sans commande de test pour ce gestionnaire, on renvoie la liste telle
+    quelle : l'option « skip » du gestionnaire s'en chargera.
+    """
+    query = PKG_COMMANDS.get(mgr, {}).get("query")
+    if not query:
+        return list(pkgs), []
+    found, missing = [], []
+    for p in pkgs:
+        try:
+            r = subprocess.run(query + [p], capture_output=True, text=True, timeout=60)
+            ok = r.returncode == 0 and bool(r.stdout.strip())
+        except (OSError, subprocess.SubprocessError):
+            ok = True        # dans le doute, on laisse le gestionnaire décider
+        (found if ok else missing).append(p)
+    if missing and log:
+        log("Paquets introuvables dans les dépôts, ignorés : " + " ".join(missing))
+    return found, missing
+
+
+def install_command(mgr, pkgs):
+    """Commande d'installation complète, telle qu'elle sera exécutée."""
+    cmd = PKG_COMMANDS.get(mgr, {})
+    if not cmd:
+        return []
+    return ["pkexec", *cmd["install"], *cmd.get("skip", []), *pkgs]
 
 # Correspondance option de l'interface -> option CMake d'ART
 CMAKE_FEATURES = {
@@ -67,6 +316,15 @@ CMAKE_FEATURES = {
     "libraw": "ENABLE_LIBRAW",
     "mimalloc": "ENABLE_MIMALLOC",
     "vulkan": "ENABLE_VULKAN",
+}
+
+# Noms affichés des options, pour les messages du journal
+FEATURE_LABELS = {
+    "ctl": "Scripts CTL",
+    "ocio": "OpenColorIO",
+    "libraw": "LibRaw",
+    "mimalloc": "mimalloc",
+    "vulkan": "Accélération GPU Vulkan",
 }
 
 
@@ -567,12 +825,6 @@ class CompileOptions:
         return str(Path(self.src_dir).expanduser() / "build")
 
 
-def dnf_packages(opts):
-    pkgs = list(DNF_BASE)
-    for key, on in opts.features.items():
-        if on:
-            pkgs += DNF_FEATURES.get(key, [])
-    return pkgs
 
 
 def cmake_command(opts):
@@ -597,12 +849,39 @@ def plan_compile(opts):
 
     def s_deps(rn):
         rn.progress(None)
-        pkgs = dnf_packages(opts)
-        if not has("dnf"):
-            raise StepError("dnf introuvable. Installe les dépendances à la main : " + " ".join(pkgs))
+        mgr = package_manager()
+        if not mgr:
+            raise StepError(
+                f"Gestionnaire de paquets non reconnu sur {distro_name()}. "
+                "Décoche « installer les dépendances » et installe toi-même "
+                "l'équivalent de : " + " ".join(base_packages("dnf")))
+        pkgs = packages(opts, mgr)
+        rn.log(f"{distro_name()} — gestionnaire de paquets : {mgr}")
+
+        manquantes = unsupported_features(mgr, [k for k, on in opts.features.items() if on])
+        for key in manquantes:
+            msg = (f"L'option « {FEATURE_LABELS.get(key, key)} » n'a pas de paquet "
+                   f"sur cette distribution : elle sera absente de la compilation.")
+            rn.log("!! " + msg)
+            rn.result.notes.append(msg)
+
         if not has("pkexec"):
-            raise StepError("pkexec introuvable. Lance d'abord : sudo dnf install " + " ".join(pkgs))
-        rn.run(["pkexec", "dnf", "install", "-y", "--skip-unavailable", *pkgs])
+            raise StepError("pkexec introuvable. Lance d'abord : sudo "
+                            + " ".join(PKG_COMMANDS[mgr]["install"]) + " " + " ".join(pkgs))
+
+        refresh = PKG_COMMANDS[mgr].get("refresh")
+        if refresh:
+            rn.run(["pkexec", *refresh])
+        pkgs, _ = available_packages(mgr, pkgs, log=rn.log)
+        if not pkgs:
+            raise StepError("Aucun des paquets attendus n'existe dans les dépôts "
+                            f"de {distro_name()}. Installe les dépendances à la main.")
+        try:
+            rn.run(install_command(mgr, pkgs))
+        except StepError:
+            rn.log("Pour installer les dépendances à la main : sudo "
+                   + " ".join(PKG_COMMANDS[mgr]["install"]) + " " + " ".join(pkgs))
+            raise
 
     def s_sources(rn):
         rn.progress(None)
