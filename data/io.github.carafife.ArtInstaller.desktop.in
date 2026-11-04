@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Installateur ART
+GenericName=Installateur du développeur RAW ART
+Comment=Installer, mettre à jour ou compiler ART
+Exec=@EXEC@
+Icon=io.github.carafife.ArtInstaller
+Terminal=false
+Categories=Graphics;Photography;Settings;
+Keywords=ART;RAW;photo;installer;compiler;CTL;
+StartupNotify=true
