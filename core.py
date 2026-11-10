@@ -571,6 +571,45 @@ class Result:
     notes: list = field(default_factory=list)
 
 
+# Lignes du journal qui expliquent un échec, pour les remonter dans le message
+# d'erreur au lieu de laisser l'utilisateur fouiller le journal.
+# CAUSE_RE : la cause elle-même. BRUIT_RE : le récapitulatif de make, qui suit
+# toujours la vraie erreur et la masquerait. INDICE_RE : à défaut, un indice.
+CAUSE_RE = re.compile(
+    r"error:|erreur:|CMake Error|fatal error|undefined reference|collect2:|"
+    r"cannot find -l|ld returned|\bKilled\b|out of memory|"
+    r"virtual memory exhausted|No space left|Aucun espace disponible", re.IGNORECASE)
+BRUIT_RE = re.compile(r"^(g?make(\[\d+\])?|ninja):|^\s*\*\*\*|Error \d+\s*$")
+INDICE_RE = re.compile(r"\berror\b|\berreur\b|No such file or directory|"
+                       r"\bfailed\b|\béchou", re.IGNORECASE)
+
+
+def error_lines(lines, limit=4):
+    """Lignes qui expliquent l'échec : la cause, sinon un indice, sinon la fin."""
+    propres = [l.strip() for l in lines if l.strip() and not BRUIT_RE.search(l)]
+    for regle in (CAUSE_RE, INDICE_RE):
+        keep = [l for l in propres if regle.search(l)]
+        if keep:
+            return keep[-limit:]
+    return (propres or [l.strip() for l in lines if l.strip()])[-limit:]
+
+
+def command_label(cmd):
+    """Nom lisible d'une commande, pour distinguer configuration et compilation."""
+    cmd = list(cmd[1:]) if cmd and cmd[0] == "pkexec" else list(cmd)
+    name = cmd[0] if cmd else "?"
+    if name == "cmake":
+        if "--build" in cmd:
+            return "la compilation (cmake --build)"
+        if "--install" in cmd:
+            return "l'installation (cmake --install)"
+        return "la configuration (cmake -S -B)"
+    if name == "git":
+        sous = cmd[1] if len(cmd) > 1 else ""
+        return f"la récupération des sources (git {sous})".replace(" )", ")")
+    return f"la commande « {name} »"
+
+
 class Runner:
     """Exécute des commandes en relayant journal et progression."""
 
@@ -580,6 +619,8 @@ class Runner:
         self.cancelled = False
         self.proc = None
         self.result = Result()
+        self.step = None          # titre de l'étape en cours, pour les erreurs
+        self.tail = []            # dernières lignes de la commande en cours
 
     def log(self, text):
         self.on_log(text)
@@ -611,8 +652,13 @@ class Runner:
         except FileNotFoundError:
             raise StepError(f"Commande introuvable : {cmd[0]}")
         self.proc = p
+        self.tail = []
         for line in p.stdout:
-            self.log(line.rstrip("\n"))
+            line = line.rstrip("\n")
+            self.log(line)
+            self.tail.append(line)
+            if len(self.tail) > 400:
+                del self.tail[:200]
             if progress_re:
                 m = progress_re.search(line)
                 if m:
@@ -625,7 +671,12 @@ class Runner:
         if rc != 0:
             if cmd[0] == "pkexec" and rc in (126, 127):
                 raise StepError("Autorisation administrateur refusée ou annulée.")
-            raise StepError(f"La commande « {cmd[0]} » a échoué (code {rc}). Voir les détails.")
+            etape = f"Étape « {self.step} » : " if self.step else ""
+            msg = f"{etape}{command_label(cmd)} a échoué (code {rc})."
+            causes = error_lines(self.tail)
+            if causes:
+                msg += "\n\n" + "\n".join(causes)
+            raise StepError(msg)
 
     def download(self, url, dest):
         self.log(f"Téléchargement : {url}")
@@ -843,6 +894,41 @@ def cmake_command(opts):
     return cmd
 
 
+def build_stamp(opts):
+    """Empreinte des choix qui rendent un dossier de compilation réutilisable."""
+    cmd = cmake_command(opts)
+    if "-B" in cmd:                       # le dossier lui-même n'a rien à y faire
+        del cmd[cmd.index("-B"):cmd.index("-B") + 2]
+    return "\n".join([opts.ref, *cmd]) + "\n"
+
+
+def prepare_build_dir(opts, log=None):
+    """Réutilise le dossier de compilation si les choix sont les mêmes, sinon le vide.
+
+    Compiler une autre version dans un dossier laissé par la précédente est une
+    source d'échecs obscurs (fichiers générés et objets périmés, sources
+    renommées entre deux versions d'ART).
+    """
+    build = Path(opts.build_dir)
+    stamp = build / ".art-installer-build"
+    attendu = build_stamp(opts)
+    if build.exists():
+        try:
+            actuel = stamp.read_text()
+        except OSError:
+            actuel = None
+        if actuel != attendu:
+            if log:
+                log("Le dossier de compilation vient d'autres choix : on le vide "
+                    f"({build}).")
+            shutil.rmtree(build, ignore_errors=True)
+    build.mkdir(parents=True, exist_ok=True)
+    try:
+        stamp.write_text(attendu)
+    except OSError:
+        pass
+
+
 def plan_compile(opts):
     src = Path(opts.src_dir).expanduser()
     progress_re = re.compile(r"^\[\s*(\d+)%\]")
@@ -904,10 +990,7 @@ def plan_compile(opts):
 
     def s_configure(rn):
         rn.progress(None)
-        # Repartir d'un cache propre : les options choisies s'appliquent à coup sûr.
-        cache = Path(opts.build_dir) / "CMakeCache.txt"
-        if cache.exists():
-            cache.unlink()
+        prepare_build_dir(opts, log=rn.log)
         rn.run(cmake_command(opts))
 
     def s_build(rn):

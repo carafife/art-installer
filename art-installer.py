@@ -556,6 +556,7 @@ class Window(Adw.ApplicationWindow):
                 self.cur, self.step_frac = i, None
                 GLib.idle_add(self.set_step_state, i, "run")
                 self._on_log(f"\n=== {step.title} ===")
+                self.runner.step = step.title
                 step.fn(self.runner)
                 GLib.idle_add(self.set_step_state, i, "ok")
         except core.Cancelled:
