@@ -22,7 +22,7 @@ from pathlib import Path
 
 APP_NAME = "Installateur ART"
 APP_ID = "io.github.carafife.ArtInstaller"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 PROJECT_URL = "https://github.com/carafife/art-installer"
 HELP_URL = PROJECT_URL + "/blob/main/AIDE.md"
 
